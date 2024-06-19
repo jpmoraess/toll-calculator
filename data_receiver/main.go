@@ -1,12 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 
-	"github.com/IBM/sarama"
 	"github.com/gorilla/websocket"
 	"github.com/jpmoraess/toll-calculator/common"
 )
@@ -23,46 +21,25 @@ func main() {
 type DataReceiver struct {
 	msgCh    chan common.OBUData
 	conn     *websocket.Conn
-	producer sarama.SyncProducer
+	producer DataProducer
 }
 
 func NewDataReceiver() (*DataReceiver, error) {
-	brokers := []string{"localhost:9092"}
-
-	config := sarama.NewConfig()
-	config.Producer.Return.Successes = true
-
-	producer, err := sarama.NewSyncProducer(brokers, config)
+	var (
+		producer DataProducer
+		topic    = "obudata"
+		addr     = "localhost:9092"
+		err      error
+	)
+	producer, err = NewKafkaProducer(addr, topic)
 	if err != nil {
-		log.Fatalf("erro ao criar o producer: %v", err)
+		return nil, err
 	}
-
+	producer = NewLogMiddleware(producer)
 	return &DataReceiver{
 		msgCh:    make(chan common.OBUData),
 		producer: producer,
 	}, nil
-}
-
-func (dr *DataReceiver) produceData(data *common.OBUData) error {
-	topic := "obudata"
-
-	b, err := json.Marshal(&data)
-	if err != nil {
-		log.Fatalf("erro ao serializar a mensagem: %v", &data)
-	}
-
-	message := &sarama.ProducerMessage{
-		Topic: topic,
-		Key:   sarama.StringEncoder("Key-A"),
-		Value: sarama.ByteEncoder(b),
-	}
-
-	partition, offset, err := dr.producer.SendMessage(message)
-	if err != nil {
-		log.Fatalf("erro ao enviar mensagem: %v", err)
-	}
-	log.Printf("mensagem enviada com sucesso, partition: %d, offset: %d", partition, offset)
-	return nil
 }
 
 func (dr *DataReceiver) handleWS(w http.ResponseWriter, r *http.Request) {
@@ -86,8 +63,9 @@ func (dr *DataReceiver) receiverLoop() {
 			log.Println("read websocket error: ", err)
 			continue
 		}
-		if err := dr.produceData(&data); err != nil {
-			fmt.Println("kafka produce error:", err)
+
+		if err := dr.producer.ProduceData(data); err != nil {
+			fmt.Println("kafka producer error:", err)
 		}
 	}
 }
