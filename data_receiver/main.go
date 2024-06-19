@@ -1,29 +1,68 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 
+	"github.com/IBM/sarama"
 	"github.com/gorilla/websocket"
 	"github.com/jpmoraess/toll-calculator/common"
 )
 
 func main() {
-	receiver := NewDataReceiver()
+	receiver, err := NewDataReceiver()
+	if err != nil {
+		log.Fatal(err)
+	}
 	http.HandleFunc("/ws", receiver.handleWS)
 	http.ListenAndServe(":3000", nil)
 }
 
 type DataReceiver struct {
-	msgCh chan common.OBUData
-	conn  *websocket.Conn
+	msgCh    chan common.OBUData
+	conn     *websocket.Conn
+	producer sarama.SyncProducer
 }
 
-func NewDataReceiver() *DataReceiver {
-	return &DataReceiver{
-		msgCh: make(chan common.OBUData),
+func NewDataReceiver() (*DataReceiver, error) {
+	brokers := []string{"localhost:9092"}
+
+	config := sarama.NewConfig()
+	config.Producer.Return.Successes = true
+
+	producer, err := sarama.NewSyncProducer(brokers, config)
+	if err != nil {
+		log.Fatalf("erro ao criar o producer: %v", err)
 	}
+
+	return &DataReceiver{
+		msgCh:    make(chan common.OBUData),
+		producer: producer,
+	}, nil
+}
+
+func (dr *DataReceiver) produceData(data *common.OBUData) error {
+	topic := "obudata"
+
+	b, err := json.Marshal(&data)
+	if err != nil {
+		log.Fatalf("erro ao serializar a mensagem: %v", &data)
+	}
+
+	message := &sarama.ProducerMessage{
+		Topic: topic,
+		Key:   sarama.StringEncoder("Key-A"),
+		Value: sarama.ByteEncoder(b),
+	}
+
+	partition, offset, err := dr.producer.SendMessage(message)
+	if err != nil {
+		log.Fatalf("erro ao enviar mensagem: %v", err)
+	}
+	log.Printf("mensagem enviada com sucesso, partition: %d, offset: %d", partition, offset)
+	return nil
 }
 
 func (dr *DataReceiver) handleWS(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +86,8 @@ func (dr *DataReceiver) receiverLoop() {
 			log.Println("read websocket error: ", err)
 			continue
 		}
-		fmt.Printf("received OBU data from ID: %v :: lat: %.2f :: long: %.2f\n", data.OBUID, data.Lat, data.Long)
-		dr.msgCh <- data
+		if err := dr.produceData(&data); err != nil {
+			fmt.Println("kafka produce error:", err)
+		}
 	}
 }
