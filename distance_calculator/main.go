@@ -4,19 +4,26 @@ import (
 	"log"
 )
 
+// Transport (HTTP, GRPC, KAFKA) -> attach business logic to this transport
+
 func main() {
-	distanceCalculator, err := NewDistanceCalculator()
+	var (
+		err     error
+		service CalculatorServicer
+	)
+	service = NewCalculatorService()
+	distanceCalculator, err := NewDistanceCalculator(service)
 	if err != nil {
 		log.Fatal(err)
 	}
-	distanceCalculator.consumer.ConsumeData()
+	distanceCalculator.consumer.Consume()
 }
 
 type DistanceCalculator struct {
 	consumer DataConsumer
 }
 
-func NewDistanceCalculator() (*DistanceCalculator, error) {
+func NewDistanceCalculator(service CalculatorServicer) (*DistanceCalculator, error) {
 	var (
 		consumer DataConsumer
 		addr     = "localhost:9092"
@@ -24,7 +31,7 @@ func NewDistanceCalculator() (*DistanceCalculator, error) {
 		group    = "distance-calculator"
 		err      error
 	)
-	consumer, err = NewKafkaConsumer(addr, topic, group)
+	consumer, err = NewKafkaConsumer(addr, topic, group, service)
 	if err != nil {
 		return nil, err
 	}

@@ -12,7 +12,7 @@ import (
 )
 
 type DataConsumer interface {
-	ConsumeData()
+	Consume() error
 }
 
 type KafkaConsumer struct {
@@ -20,9 +20,10 @@ type KafkaConsumer struct {
 	addr     string
 	topic    string
 	group    string
+	service  CalculatorServicer
 }
 
-func NewKafkaConsumer(addr, topic, group string) (DataConsumer, error) {
+func NewKafkaConsumer(addr, topic, group string, service CalculatorServicer) (DataConsumer, error) {
 	brokers := []string{addr}
 	config := sarama.NewConfig()
 	config.Consumer.Group.Rebalance.Strategy = sarama.NewBalanceStrategyRoundRobin()
@@ -38,14 +39,17 @@ func NewKafkaConsumer(addr, topic, group string) (DataConsumer, error) {
 		addr:     addr,
 		topic:    topic,
 		group:    group,
+		service:  service,
 	}, nil
 }
 
-func (c *KafkaConsumer) ConsumeData() {
+func (c *KafkaConsumer) Consume() error {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
 
-	consumerHandler := ConsumerGroupHandler{}
+	consumerHandler := &ConsumerGroupHandler{
+		consumer: c,
+	}
 
 	go func() {
 		for {
@@ -56,21 +60,25 @@ func (c *KafkaConsumer) ConsumeData() {
 	}()
 
 	<-signals
+
+	return nil
 }
 
-type ConsumerGroupHandler struct{}
+type ConsumerGroupHandler struct {
+	consumer *KafkaConsumer
+}
 
 // Setup é executado ao iniciar o Consumer Group
-func (ConsumerGroupHandler) Setup(sarama.ConsumerGroupSession) error {
+func (h *ConsumerGroupHandler) Setup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
 // Cleanup é executado ao finalizar o Consumer Group
-func (ConsumerGroupHandler) Cleanup(sarama.ConsumerGroupSession) error {
+func (h *ConsumerGroupHandler) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
-func (ConsumerGroupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+func (h *ConsumerGroupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for msg := range claim.Messages() {
 		var message common.OBUData
 		if err := json.Unmarshal(msg.Value, &message); err != nil {
@@ -78,6 +86,11 @@ func (ConsumerGroupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, claim
 			continue
 		}
 		log.Printf("mensagem recebida com sucesso: %+v", message)
+		result, err := h.consumer.service.CalculateDistance(message)
+		if err != nil {
+			return err
+		}
+		log.Printf("cáculo realizado com sucesso: %+v", result)
 	}
 	return nil
 }
