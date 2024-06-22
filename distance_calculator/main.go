@@ -12,6 +12,7 @@ func main() {
 		service CalculatorServicer
 	)
 	service = NewCalculatorService()
+	service = NewLogMiddleware(service)
 	distanceCalculator, err := NewDistanceCalculator(service)
 	if err != nil {
 		log.Fatal(err)

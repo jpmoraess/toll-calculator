@@ -85,12 +85,10 @@ func (h *ConsumerGroupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, cl
 			log.Printf("erro ao desserializar mensagem: %v", err)
 			continue
 		}
-		log.Printf("mensagem recebida com sucesso: %+v", message)
-		result, err := h.consumer.service.CalculateDistance(message)
+		_, err := h.consumer.service.CalculateDistance(message)
 		if err != nil {
 			return err
 		}
-		log.Printf("cáculo realizado com sucesso: %+v", result)
 	}
 	return nil
 }
