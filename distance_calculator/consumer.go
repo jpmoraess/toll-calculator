@@ -6,9 +6,12 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/jpmoraess/toll-calculator/common"
+	"github.com/jpmoraess/toll-calculator/distance_calculator/client"
+	"github.com/sirupsen/logrus"
 )
 
 type DataConsumer interface {
@@ -16,14 +19,15 @@ type DataConsumer interface {
 }
 
 type KafkaConsumer struct {
-	consumer sarama.ConsumerGroup
-	addr     string
-	topic    string
-	group    string
-	service  CalculatorServicer
+	consumer         sarama.ConsumerGroup
+	addr             string
+	topic            string
+	group            string
+	service          CalculatorServicer
+	aggregatorClient *client.AggregatorClient
 }
 
-func NewKafkaConsumer(addr, topic, group string, service CalculatorServicer) (DataConsumer, error) {
+func NewKafkaConsumer(addr, topic, group string, service CalculatorServicer, aggregatorClient *client.AggregatorClient) (DataConsumer, error) {
 	brokers := []string{addr}
 	config := sarama.NewConfig()
 	config.Consumer.Group.Rebalance.Strategy = sarama.NewBalanceStrategyRoundRobin()
@@ -35,11 +39,12 @@ func NewKafkaConsumer(addr, topic, group string, service CalculatorServicer) (Da
 	}
 
 	return &KafkaConsumer{
-		consumer: consumer,
-		addr:     addr,
-		topic:    topic,
-		group:    group,
-		service:  service,
+		consumer:         consumer,
+		addr:             addr,
+		topic:            topic,
+		group:            group,
+		service:          service,
+		aggregatorClient: aggregatorClient,
 	}, nil
 }
 
@@ -85,10 +90,21 @@ func (h *ConsumerGroupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, cl
 			log.Printf("erro ao desserializar mensagem: %v", err)
 			continue
 		}
-		_, err := h.consumer.service.CalculateDistance(message)
+		distance, err := h.consumer.service.CalculateDistance(message)
 		if err != nil {
 			return err
 		}
+
+		req := common.Distance{
+			OBUID: message.OBUID,
+			Value: distance,
+			Unix:  time.Now().UnixNano(),
+		}
+		if err := h.consumer.aggregatorClient.AggregateInvoice(req); err != nil {
+			logrus.Errorf("aggregate error:", err)
+			continue
+		}
+
 	}
 	return nil
 }

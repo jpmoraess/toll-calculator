@@ -11,7 +11,7 @@ type LogMiddleware struct {
 	next DataProducer
 }
 
-func NewLogMiddleware(next DataProducer) *LogMiddleware {
+func NewLogMiddleware(next DataProducer) DataProducer {
 	return &LogMiddleware{
 		next: next,
 	}
