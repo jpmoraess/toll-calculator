@@ -1,17 +1,17 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/jpmoraess/toll-calculator/common"
 )
 
 type Aggregator interface {
 	AggregateDistance(common.Distance) error
+	GetInvoice(int) (*common.Invoice, error)
 }
 
 type Storer interface {
 	Insert(common.Distance) error
+	Get(int) (float64, error)
 }
 
 type InvoiceAggregator struct {
@@ -25,6 +25,17 @@ func NewInvoiceAggregator(store Storer) *InvoiceAggregator {
 }
 
 func (i *InvoiceAggregator) AggregateDistance(distance common.Distance) error {
-	fmt.Println("processing and inserting distance in the storage:", distance)
 	return i.store.Insert(distance)
+}
+
+func (i *InvoiceAggregator) GetInvoice(obuID int) (*common.Invoice, error) {
+	distance, err := i.store.Get(obuID)
+	if err != nil {
+		return nil, err
+	}
+	return &common.Invoice{
+		OBUID:         obuID,
+		TotalDistance: distance,
+		TotalAmount:   distance * 1.5,
+	}, nil
 }

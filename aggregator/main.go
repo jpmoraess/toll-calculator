@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/jpmoraess/toll-calculator/common"
 )
@@ -28,6 +29,7 @@ func main() {
 func makeHTTPTransport(listenAddr string, service Aggregator) {
 	fmt.Println("HTTP transport running on port", listenAddr)
 	http.HandleFunc("POST /aggregate", handleAggregate(service))
+	http.HandleFunc("GET /invoice", handleGetInvoice(service))
 	if err := http.ListenAndServe(listenAddr, nil); err != nil {
 		fmt.Printf("error server HTTP: %s\n", err)
 	}
@@ -44,6 +46,27 @@ func handleAggregate(service Aggregator) http.HandlerFunc {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
+	}
+}
+
+func handleGetInvoice(service Aggregator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		obuID := r.URL.Query().Get("obuID")
+		if obuID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "query param obuID is required"})
+			return
+		}
+		id, err := strconv.Atoi(obuID)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid obuID"})
+			return
+		}
+		invoice, err := service.GetInvoice(id)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, invoice)
 	}
 }
 
