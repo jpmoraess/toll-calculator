@@ -10,14 +10,20 @@ import (
 
 func main() {
 	var (
-		err              error
-		service          CalculatorServicer
-		aggregatorClient *client.AggregatorClient
+		err                  error
+		service              CalculatorServicer
+		aggregatorHTTPClient *client.AggregatorHttpClient
+		aggregatorGRPCClient *client.AggregatorGRPCClient
 	)
-	aggregatorClient = client.NewAggregatorClient("http://localhost:3001/aggregate")
+	aggregatorHTTPClient = client.NewAggregatorHttpClient("http://localhost:3001/aggregate")
+	aggregatorGRPCClient = client.NewAggregatorGRPCClient("localhost:50051")
+	_ = aggregatorHTTPClient
+	_ = aggregatorGRPCClient
+
 	service = NewCalculatorService()
 	service = NewLogMiddleware(service)
-	distanceCalculator, err := NewDistanceCalculator(service, aggregatorClient)
+
+	distanceCalculator, err := NewDistanceCalculator(service, aggregatorGRPCClient)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -28,7 +34,7 @@ type DistanceCalculator struct {
 	consumer DataConsumer
 }
 
-func NewDistanceCalculator(service CalculatorServicer, aggregatorClient *client.AggregatorClient) (*DistanceCalculator, error) {
+func NewDistanceCalculator(service CalculatorServicer, aggregatorHttpClient client.AggregatorClient) (*DistanceCalculator, error) {
 	var (
 		consumer DataConsumer
 		addr     = "localhost:9092"
@@ -36,7 +42,7 @@ func NewDistanceCalculator(service CalculatorServicer, aggregatorClient *client.
 		group    = "distance-calculator"
 		err      error
 	)
-	consumer, err = NewKafkaConsumer(addr, topic, group, service, aggregatorClient)
+	consumer, err = NewKafkaConsumer(addr, topic, group, service, aggregatorHttpClient)
 	if err != nil {
 		return nil, err
 	}

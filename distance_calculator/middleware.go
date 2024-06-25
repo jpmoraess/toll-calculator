@@ -25,6 +25,5 @@ func (m *LogMiddleware) CalculateDistance(data common.OBUData) (distance float64
 			"distance": distance,
 		}).Info("calculate distance")
 	}(time.Now())
-	distance, err = m.next.CalculateDistance(data)
-	return
+	return m.next.CalculateDistance(data)
 }

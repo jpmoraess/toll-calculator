@@ -24,10 +24,10 @@ type KafkaConsumer struct {
 	topic            string
 	group            string
 	service          CalculatorServicer
-	aggregatorClient *client.AggregatorClient
+	aggregatorClient client.AggregatorClient
 }
 
-func NewKafkaConsumer(addr, topic, group string, service CalculatorServicer, aggregatorClient *client.AggregatorClient) (DataConsumer, error) {
+func NewKafkaConsumer(addr, topic, group string, service CalculatorServicer, aggregatorClient client.AggregatorClient) (DataConsumer, error) {
 	brokers := []string{addr}
 	config := sarama.NewConfig()
 	config.Consumer.Group.Rebalance.Strategy = sarama.NewBalanceStrategyRoundRobin()
@@ -100,8 +100,8 @@ func (h *ConsumerGroupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, cl
 			Value: distance,
 			Unix:  time.Now().UnixNano(),
 		}
-		if err := h.consumer.aggregatorClient.AggregateInvoice(req); err != nil {
-			logrus.Errorf("aggregate error:", err)
+		if err := h.consumer.aggregatorClient.AggregateInvoice(context.Background(), req); err != nil {
+			logrus.Errorf("aggregate error: %v", err)
 			continue
 		}
 

@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	httpAddr := flag.String("httpAddr", ":3000", "the listen address of the HTTP server")
+	httpAddr := flag.String("httpAddr", ":3001", "the listen address of the HTTP server")
 	grpcAddr := flag.String("grpcAddr", ":50051", "the listen address of the GRPC server")
 	flag.Parse()
 
